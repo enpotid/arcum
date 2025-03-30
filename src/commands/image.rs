@@ -287,7 +287,7 @@ pub async fn hexcode(
 ) -> Result<(), Error> {
     ctx.defer().await?;
 
-    let example = "\nExample : #FFBF98\nCase does not matter";
+    let example = "\nExample : FFBF98\nCase does not matter";
 
     if hex_code.len() != 6 {
         let embed = CreateEmbed::default().title("Error!!").description(format!(
@@ -329,7 +329,120 @@ pub async fn hexcode(
 
             let embed = CreateEmbed::default()
                 .title("Generated Color!!")
-                .description(format!("#{}{}{}", hex1, hex2, hex3));
+                .description(format!("{}", hex_code.to_lowercase()));
+
+            ctx.send(CreateReply::default().embed(embed).attachment(attachment))
+                .await?;
+        }
+        _ => {
+            let embed = CreateEmbed::default()
+                .title("Error!!")
+                .description(format!("The hex code must be hexadecimal{example}"));
+
+            ctx.send(CreateReply::default().embed(embed)).await?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Display the gradient colors
+#[poise::command(slash_command)]
+pub async fn gradient(
+    ctx: Context<'_>,
+    #[description = "Enter the left top hex code"] left_top_hex_code: String,
+    #[description = "Enter the left bottom hex code"] left_bottom_hex_code: String,
+    #[description = "Enter the right top hex code"] right_top_hex_code: String,
+    #[description = "Enter the right bottom hex code"] right_bottom_hex_code: String,
+) -> Result<(), Error> {
+    ctx.defer().await?;
+
+    let example = "\nExample : FFBF98\nCase does not matter";
+
+    if left_top_hex_code.len() != 6
+        || left_bottom_hex_code.len() != 6
+        || right_top_hex_code.len() != 6
+        || right_bottom_hex_code.len() != 6
+    {
+        let embed = CreateEmbed::default().title("Error!!").description(format!(
+            "The hex code must be exactly 6 characters{example}"
+        ));
+
+        ctx.send(CreateReply::default().embed(embed)).await?;
+
+        return Ok(());
+    }
+
+    let parse_hex = |hex_code: &str| {
+        let chunks: Vec<String> = hex_code
+            .to_lowercase()
+            .chars()
+            .collect::<Vec<char>>()
+            .chunks(2)
+            .map(|chunk| chunk.iter().collect::<String>())
+            .collect();
+
+        return if let Ok(a) = u8::from_str_radix(&chunks[0], 16) {
+            if let Ok(b) = u8::from_str_radix(&chunks[1], 16) {
+                if let Ok(c) = u8::from_str_radix(&chunks[2], 16) {
+                    Some([a, b, c])
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+    };
+
+    match (
+        parse_hex(&left_top_hex_code),
+        parse_hex(&left_bottom_hex_code),
+        parse_hex(&right_top_hex_code),
+        parse_hex(&right_bottom_hex_code),
+    ) {
+        (Some(lt), Some(lb), Some(rt), Some(rb)) => {
+            fn interpolate(c1: Rgb<u8>, c2: Rgb<u8>, t: f32) -> Rgb<u8> {
+                Rgb([
+                    ((1.0 - t) * c1[0] as f32 + t * c2[0] as f32) as u8,
+                    ((1.0 - t) * c1[1] as f32 + t * c2[1] as f32) as u8,
+                    ((1.0 - t) * c1[2] as f32 + t * c2[2] as f32) as u8,
+                ])
+            }
+
+            let mut img = RgbImage::new(100, 100);
+            let lt = Rgb(lt);
+            let lb = Rgb(lb);
+            let rt = Rgb(rt);
+            let rb = Rgb(rb);
+
+            for y in 0..100 {
+                let left = interpolate(lt, lb, y as f32 / 99.0);
+                let right = interpolate(rt, rb, y as f32 / 99.0);
+
+                for x in 0..100 {
+                    let color = interpolate(left, right, x as f32 / 99.0);
+                    img.put_pixel(x, y, color);
+                }
+            }
+
+            let mut buffer = Vec::new();
+            img.write_to(&mut Cursor::new(&mut buffer), image::ImageOutputFormat::Png)
+                .expect("Failed to write image");
+
+            let attachment = CreateAttachment::bytes(Bytes::from(buffer), "gradient.png");
+
+            let embed = CreateEmbed::default()
+                .title("Generated Gradient!!")
+                .description(format!(
+                    "left top : {}\nleft bottom : {}\nright top : {}\nright bottom : {}",
+                    left_top_hex_code,
+                    left_bottom_hex_code,
+                    right_top_hex_code,
+                    right_bottom_hex_code
+                ));
 
             ctx.send(CreateReply::default().embed(embed).attachment(attachment))
                 .await?;

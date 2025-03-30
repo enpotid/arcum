@@ -62,6 +62,7 @@ async fn main() {
             commands::sha256(),
             commands::argon2(),
             commands::verify(),
+            commands::gradient(),
         ],
         prefix_options: poise::PrefixFrameworkOptions {
             prefix: Some("~".into()),
